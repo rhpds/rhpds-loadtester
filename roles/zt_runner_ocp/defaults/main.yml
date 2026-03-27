@@ -1,0 +1,24 @@
+---
+# Runner image — pre-baked with kubernetes.core and all lab collections
+zt_runner_ocp_image: "quay.io/rhpds/zt-runner:v1.0.0"
+
+# Student user identity (LAB_USER env var in runner)
+zt_runner_ocp_lab_user: >-
+  {{ ocp4_workload_tenant_keycloak_username | default('devuser-' + guid) }}
+
+# Showroom namespace — auto-derived from ocp4_workload_showroom
+zt_runner_ocp_showroom_namespace: >-
+  {{
+    ocp4_workload_showroom_namespace
+    | default(ocp4_workload_tenant_keycloak_username | default('devuser-' + guid) + '-showroom')
+  }}
+
+# ClusterRole name — unique per guid
+zt_runner_ocp_clusterrole_name: "zt-runner-{{ guid }}"
+
+# Runner API port
+zt_runner_ocp_port: "8501"
+
+# Cluster connection
+zt_runner_ocp_openshift_api_url: "{{ openshift_api_url | default('') }}"
+zt_runner_ocp_openshift_api_token: "{{ openshift_api_key | default('') }}"
