@@ -14,7 +14,7 @@
 # =============================================================================
 
 # Runner image — unified image with all collections baked in
-zt_runner_ocp_image: "quay.io/rhpds/zt-runner:latest"
+zt_runner_ocp_image: "quay.io/rhpds/zt-runner:v1.0.0"
 
 # Lab user — defaults to keycloak username set by ocp4_workload_tenant_keycloak_user
 zt_runner_ocp_lab_user: "{{ ocp4_workload_tenant_keycloak_username | default('devuser-' + guid) }}"

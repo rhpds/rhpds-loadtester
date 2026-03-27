@@ -14,7 +14,7 @@
 # =============================================================================
 
 # Runner image — same unified image for all lab types
-zt_runner_rhel_image: "quay.io/rhpds/zt-runner:latest"
+zt_runner_rhel_image: "quay.io/rhpds/zt-runner:v1.0.0"
 
 # Showroom namespace — mirrors what ocp4_workload_showroom uses
 zt_runner_rhel_showroom_namespace: >-
