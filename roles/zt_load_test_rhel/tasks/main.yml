@@ -1,0 +1,4 @@
+---
+- name: Running zt_load_test_rhel tasks
+  when: ACTION == "provision"
+  ansible.builtin.include_tasks: workload.yml

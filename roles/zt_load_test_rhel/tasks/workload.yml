@@ -1,0 +1,119 @@
+---
+# =============================================================================
+# zt_load_test_rhel — trigger solve + validate on all modules
+# =============================================================================
+
+- name: Get showroom route
+  kubernetes.core.k8s_info:
+    host: "{{ zt_load_test_rhel_openshift_api_url | default(omit) }}"
+    api_key: "{{ zt_load_test_rhel_openshift_api_token | default(omit) }}"
+    validate_certs: false
+    api_version: route.openshift.io/v1
+    kind: Route
+    namespace: "{{ zt_load_test_rhel_showroom_namespace }}"
+    label_selectors:
+      - "app=showroom"
+  register: r_route
+
+- name: Fail if showroom route not found
+  ansible.builtin.fail:
+    msg: "Showroom route not found in {{ zt_load_test_rhel_showroom_namespace }}"
+  when: r_route.resources | length == 0
+
+- name: Set runner base URL
+  ansible.builtin.set_fact:
+    _runner_url: "https://{{ r_route.resources[0].spec.host }}/runner"
+
+- name: Wait for runner API to be ready
+  ansible.builtin.uri:
+    url: "{{ _runner_url }}/api/config"
+    validate_certs: false
+    status_code: 200
+  register: r_config
+  retries: "{{ (zt_load_test_rhel_wait_seconds | int / 10) | int }}"
+  delay: 10
+  until: r_config.status == 200
+
+- name: Set modules list
+  ansible.builtin.set_fact:
+    _modules: "{{ r_config.json.keys() | reject('equalto', 'collections') | list }}"
+
+- name: "Trigger solve on all modules: {{ _modules }}"
+  ansible.builtin.uri:
+    url: "{{ _runner_url }}/api/{{ item }}/solve"
+    method: POST
+    validate_certs: false
+    status_code: [200, 202]
+    body_format: json
+  register: r_solve_jobs
+  loop: "{{ _modules }}"
+
+- name: Poll solve jobs until complete
+  ansible.builtin.uri:
+    url: "{{ _runner_url }}/api/job/{{ item.json.Job_id }}"
+    validate_certs: false
+    status_code: 200
+  register: r_solve_poll
+  loop: "{{ r_solve_jobs.results | selectattr('json.Job_id', 'defined') | list }}"
+  loop_control:
+    label: "{{ item.item }}"
+  retries: 30
+  delay: 5
+  until: r_solve_poll.json.Status in ['successful', 'failed', 'error']
+
+- name: "Trigger validation on all modules: {{ _modules }}"
+  ansible.builtin.uri:
+    url: "{{ _runner_url }}/api/{{ item }}/validation"
+    method: POST
+    validate_certs: false
+    status_code: [200, 202]
+    body_format: json
+  register: r_val_jobs
+  loop: "{{ _modules }}"
+
+- name: Poll validation jobs until complete
+  ansible.builtin.uri:
+    url: "{{ _runner_url }}/api/job/{{ item.json.Job_id }}"
+    validate_certs: false
+    status_code: 200
+  register: r_val_poll
+  loop: "{{ r_val_jobs.results | selectattr('json.Job_id', 'defined') | list }}"
+  loop_control:
+    label: "{{ item.item }}"
+  retries: 30
+  delay: 5
+  until: r_val_poll.json.Status in ['successful', 'failed', 'error']
+
+- name: Build results summary
+  ansible.builtin.set_fact:
+    _solve_results: >-
+      {{ dict(_modules | zip(
+           r_solve_poll.results | map(attribute='json') | map(attribute='Status', default='unknown')
+         )) }}
+    _val_results: >-
+      {{ dict(_modules | zip(
+           r_val_poll.results | map(attribute='json') | map(attribute='Status', default='unknown')
+         )) }}
+
+- name: Report load test results via agnosticd_user_info
+  agnosticd.core.agnosticd_user_info:
+    data:
+      zt_load_test_solve: "{{ _solve_results }}"
+      zt_load_test_validation: "{{ _val_results }}"
+    msg: |
+      ZT Load Test (OCP)
+      Solve:      {{ _solve_results }}
+      Validation: {{ _val_results }}
+  ignore_errors: true
+
+- name: Fail if any stage failed
+  ansible.builtin.fail:
+    msg: >-
+      ZT load test failures!
+      Solve: {{ _solve_results }}
+      Validation: {{ _val_results }}
+  when: >-
+    'failed' in (_solve_results.values() | list) or
+    'error'  in (_solve_results.values() | list) or
+    'failed' in (_val_results.values() | list) or
+    'error'  in (_val_results.values() | list)

@@ -1,0 +1,11 @@
+---
+# zt_load_test_rhel — triggers solve + validation on all ZT modules (RHEL/VM labs)
+# Showroom deployed on OCP even for VM labs; runner accessible via route.
+
+zt_load_test_rhel_showroom_namespace: >-
+  {{ ocp4_workload_showroom_namespace | default('showroom-' + guid) }}
+
+zt_load_test_rhel_wait_seconds: 120
+
+zt_load_test_rhel_openshift_api_url: "{{ openshift_api_url | default('') }}"
+zt_load_test_rhel_openshift_api_token: "{{ openshift_api_key | default('') }}"

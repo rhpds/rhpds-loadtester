@@ -1,0 +1,17 @@
+---
+# zt_load_test_ocp — triggers solve + validation on all ZT modules
+# Requires showroom ZT runner already deployed.
+# Auto-derives showroom namespace from ocp4_workload_showroom.
+
+zt_load_test_ocp_showroom_namespace: >-
+  {{
+    ocp4_workload_showroom_namespace
+    | default(ocp4_workload_tenant_keycloak_username | default('devuser-' + guid) + '-showroom')
+  }}
+
+# Seconds to wait for runner API
+zt_load_test_ocp_wait_seconds: 120
+
+# Cluster connection (for discovering showroom route)
+zt_load_test_ocp_openshift_api_url: "{{ openshift_api_url | default('') }}"
+zt_load_test_ocp_openshift_api_token: "{{ openshift_api_key | default('') }}"

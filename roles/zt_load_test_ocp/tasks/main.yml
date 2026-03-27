@@ -1,0 +1,4 @@
+---
+- name: Running zt_load_test_ocp tasks
+  when: ACTION == "provision"
+  ansible.builtin.include_tasks: workload.yml

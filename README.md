@@ -1,27 +1,17 @@
 # rhpds.loadtester
 
-Ansible collection providing Zero Touch (ZT) runner roles for RHDP labs.
+Ansible collection for Zero Touch (ZT) load testing in RHDP labs.
 
-Adds a `zerotouch-automation` runner sidecar to the showroom pod so that
-solve/validate/setup buttons work via the nookbag UI.
+Triggers solve + validation on all lab modules simultaneously via the
+zerotouch-automation runner API — used to verify the grading engine works
+end-to-end after provisioning.
 
 ## Roles
 
-| Role | Mode | Use case |
+| Role | Lab type | Description |
 |---|---|---|
-| `zt_runner_ocp` | OCP-native | OCP labs — runner uses `kubernetes.core`, no SSH/bastion |
-| `zt_runner_rhel` | SSH/bastion | RHEL/VM labs — runner SSHes to bastion to run scripts |
-
-Both roles use the same unified runner image: `quay.io/rhpds/zt-runner:latest`
-
-## Runner Image
-
-`quay.io/rhpds/zt-runner:latest` includes:
-- Latest `ansible-core` + `ansible-runner`
-- Python: `kubernetes`, `jmespath`, `netaddr`, `hvac`, `pyOpenSSL`, `passlib`, `boto3`
-- Collections: `kubernetes.core`, `ansible.posix`, `community.general`, `community.crypto`,
-  `redhat.openshift`, `ansible.controller`, `community.hashi_vault`, `ansible.netcommon`,
-  `community.mysql`, `community.postgresql`
+| `zt_load_test_ocp` | OCP tenant labs | Discovers showroom route, triggers solve + validate on all modules, reports via `agnosticd_user_info` |
+| `zt_load_test_rhel` | RHEL/VM labs | Same as above for VM-based showrooms |
 
 ## Usage (AgV common.yaml)
 
@@ -30,14 +20,37 @@ requirements_content:
   collections:
   - name: https://github.com/rhpds/rhpds-loadtester.git
     type: git
-    version: main
+    version: "{{ tag }}"
 
 workloads: >-
   {{
-    ['agnosticd.showroom.ocp4_workload_showroom'] +
-    (['rhpds.loadtester.zt_runner_ocp'] if zt_runner_enabled | default(false) | bool else [])
+    ['agnosticd.showroom.ocp4_workload_showroom', ...] +
+    (
+      ['rhpds.loadtester.zt_load_test_ocp']
+      if zt_load_testing_enabled | default(false) | bool
+      else []
+    )
   }}
 
-zt_runner_ocp_lab_user: "devuser-{{ guid }}"
-zt_runner_ocp_showroom_namespace: "{{ ocp4_workload_tenant_keycloak_username }}-showroom"
+# Parameter in __meta__.catalog.parameters:
+# - name: zt_load_testing_enabled
+#   formLabel: "Run ZT Load Test"
+#   openAPIV3Schema:
+#     type: boolean
+#     default: false
 ```
+
+## Prerequisites
+
+The ZT runner must already be deployed in the showroom namespace.
+For OCP labs this is handled by the showroom ZT configuration
+(`ocp4_workload_showroom` with `zero_touch_ui_enabled: true` and the
+zerotouch helm chart which includes the runner container).
+
+## Runner image
+
+`quay.io/rhpds/zt-runner:v1.0.0` — unified image with:
+- Python: `kubernetes`, `jmespath`, `netaddr`, `hvac`, `pyOpenSSL`, `passlib`, `boto3`
+- Collections: `kubernetes.core`, `ansible.posix`, `community.general`,
+  `community.crypto`, `community.hashi_vault`, `ansible.netcommon`,
+  `community.mysql`, `community.postgresql`
