@@ -1,0 +1,16 @@
+---
+# Student namespace — auto-derived from keycloak username
+# Default uses user-{guid} pattern (standard namespaced_workloads convention)
+zt_runner_ocp_student_ns: >-
+  {{ ocp4_workload_tenant_keycloak_username | default('user-' + guid) }}-zttest
+
+# Showroom namespace (where showroom SA lives)
+zt_runner_ocp_showroom_namespace: >-
+  {{
+    ocp4_workload_showroom_namespace
+    | default(ocp4_workload_tenant_keycloak_username | default('user-' + guid) + '-showroom')
+  }}
+
+# Cluster connection
+zt_runner_ocp_openshift_api_url: "{{ openshift_api_url | default('') }}"
+zt_runner_ocp_openshift_api_token: "{{ openshift_api_key | default('') }}"

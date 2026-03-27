@@ -1,0 +1,28 @@
+---
+# Grant showroom SA access to student namespace ONLY via RoleBinding.
+# Uses RoleBinding (namespace-scoped) not ClusterRole (cluster-wide).
+# Showroom SA gets no access to showroom namespace or any other namespace.
+
+- name: Grant showroom SA admin access to student namespace
+  kubernetes.core.k8s:
+    host: "{{ zt_runner_ocp_openshift_api_url | default(omit) }}"
+    api_key: "{{ zt_runner_ocp_openshift_api_token | default(omit) }}"
+    validate_certs: false
+    state: present
+    definition:
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: RoleBinding
+      metadata:
+        name: showroom-runner
+        namespace: "{{ zt_runner_ocp_student_ns }}"
+        labels:
+          created-by: rhpds-loadtester
+          guid: "{{ guid }}"
+      subjects:
+        - kind: ServiceAccount
+          name: showroom
+          namespace: "{{ zt_runner_ocp_showroom_namespace }}"
+      roleRef:
+        kind: ClusterRole
+        name: admin
+        apiGroup: rbac.authorization.k8s.io
