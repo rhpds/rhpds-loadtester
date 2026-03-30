@@ -1,5 +1,5 @@
 ---
-- name: Remove showroom SA RoleBinding from student namespace
+- name: Remove showroom SA RoleBindings from student namespaces
   kubernetes.core.k8s:
     host: "{{ zt_runner_ocp_openshift_api_url | default(omit) }}"
     api_key: "{{ zt_runner_ocp_openshift_api_token | default(omit) }}"
@@ -8,4 +8,7 @@
     api_version: rbac.authorization.k8s.io/v1
     kind: RoleBinding
     name: showroom-runner
-    namespace: "{{ zt_runner_ocp_student_ns }}"
+    namespace: "{{ zt_runner_ocp_username }}-{{ item.suffix }}"
+  loop: "{{ zt_runner_ocp_namespace_suffixes }}"
+  loop_control:
+    label: "{{ zt_runner_ocp_username }}-{{ item.suffix }}"
