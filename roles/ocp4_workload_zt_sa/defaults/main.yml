@@ -14,3 +14,7 @@ zt_runner_ocp_showroom_namespace: >-
 # Cluster connection
 zt_runner_ocp_openshift_api_url: "{{ openshift_api_url | default('') }}"
 zt_runner_ocp_openshift_api_token: "{{ openshift_api_key | default('') }}"
+
+# Second student namespace (optional)
+zt_runner_ocp_student_ns2: >-
+  {{ ocp4_workload_tenant_keycloak_username | default("user-" + guid) }}-ztworkspace
