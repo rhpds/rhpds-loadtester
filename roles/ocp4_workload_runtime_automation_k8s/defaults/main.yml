@@ -1,0 +1,25 @@
+---
+# SA name created in each student namespace
+ocp4_workload_runtime_automation_k8s_sa_name: zt-runner
+
+# Student namespace suffixes — same list as ocp4_workload_tenant_namespace
+ocp4_workload_runtime_automation_k8s_namespace_suffixes: >-
+  {{ ocp4_workload_tenant_namespace_suffixes | default([]) }}
+
+# Username — auto-derived from keycloak workload
+ocp4_workload_runtime_automation_k8s_username: >-
+  {{ ocp4_workload_tenant_keycloak_username | default('user-' + guid) }}
+
+# Showroom namespace — where kubeconfig Secret is stored (runner can read it)
+ocp4_workload_runtime_automation_k8s_showroom_namespace: >-
+  {{
+    ocp4_workload_showroom_namespace
+    | default(ocp4_workload_tenant_keycloak_username | default('user-' + guid) + '-showroom')
+  }}
+
+# Secret name in showroom namespace that holds the kubeconfig
+ocp4_workload_runtime_automation_k8s_secret_name: zt-runner-kubeconfig
+
+# Cluster connection
+ocp4_workload_runtime_automation_k8s_openshift_api_url: "{{ openshift_api_url | default('') }}"
+ocp4_workload_runtime_automation_k8s_openshift_api_token: "{{ openshift_api_key | default('') }}"

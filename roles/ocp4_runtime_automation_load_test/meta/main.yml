@@ -1,6 +1,6 @@
 ---
 galaxy_info:
-  role_name: ocp4_workload_zt_load_test
+  role_name: ocp4_runtime_automation_load_test
   author: RHDP Team
   description: Triggers solve + validation on all ZT modules via runner API (OCP labs)
   license: MIT-0

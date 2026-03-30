@@ -1,6 +1,6 @@
 ---
 galaxy_info:
-  role_name: rhel_workload_zt_load_test
+  role_name: vm_runtime_automation_load_test
   author: RHDP Team
   description: Triggers solve + validation on all ZT modules via runner API (RHEL/VM labs)
   license: MIT-0

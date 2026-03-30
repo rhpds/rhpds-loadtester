@@ -1,0 +1,11 @@
+---
+galaxy_info:
+  role_name: ocp4_workload_runtime_automation_k8s
+  description: >-
+    Creates a scoped ServiceAccount + kubeconfig for the ZT runner in each
+    student namespace. Stores kubeconfig as a Secret in the showroom namespace
+    so jobs.py can read it and pass it to playbooks via extravars.
+    Eliminates the need for cluster-wide SA permissions.
+  license: MIT-0
+  min_ansible_version: "2.15"
+dependencies: []
