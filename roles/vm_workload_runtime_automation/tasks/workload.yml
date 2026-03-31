@@ -3,11 +3,11 @@
 # vm_workload_runtime_automation
 #
 # Runs on the bastion AFTER vm_workload_showroom.
-# Prepares the ansible-runner-api container for ZT grading:
-#   1. Copies the lab SSH key so the runner can SSH to nodes
-#      (persists on bastion disk — survives restarts via volume mount)
-#   2. Resolves node IPs via bastion DNS and adds extra_hosts to compose
-#      (persists through container restarts — written to compose file)
+# Prepares the ansible-runner-api container for ZT grading.
+# Both files written to /opt/showroom/.ssh/ on bastion — mounted as
+# /app/.ssh/ in the container. Persists through all restarts automatically.
+#   1. id_rsa       — lab SSH key for connecting to nodes
+#   2. config       — SSH config with Host entries (name → IP) for all nodes
 #
 # Node discovery: union of both sources
 #   - instances (AgV cloud-vms-base list) filtered by AnsibleGroup tag
@@ -75,32 +75,23 @@
   failed_when: false
   changed_when: false
 
-- name: Build extra_hosts list for compose
-  ansible.builtin.set_fact:
-    _zt_extra_hosts: >-
-      {%- set result = [] -%}
-      {%- for item in r_getent.results -%}
-        {%- if item.rc == 0 and item.stdout != '' -%}
-          {%- set _ = result.append(item.stdout.split()[0] ~ ':' ~ item.item) -%}
-        {%- endif -%}
-      {%- endfor -%}
-      {{ result }}
-
-- name: Add extra_hosts to ansible-runner-api in compose (persists through restarts)
+- name: Write SSH config with node host entries
   become: true
   ansible.builtin.blockinfile:
-    path: "{{ vm_workload_runtime_automation_compose_file }}"
-    insertafter: "container_name: ansible-runner-api"
-    marker: "    # {mark} ZT extra_hosts"
+    path: "{{ vm_workload_runtime_automation_ssh_key_dest | dirname }}/config"
+    create: true
+    owner: "{{ vm_workload_runtime_automation_showroom_user }}"
+    group: "{{ vm_workload_runtime_automation_showroom_user }}"
+    mode: '0600'
+    marker: "# {mark} ZT node hosts"
     block: |
-      {% if _zt_extra_hosts | length > 0 %}
-          extra_hosts:
-      {% for entry in _zt_extra_hosts %}
-            - "{{ entry }}"
-      {% endfor %}
+      {% for item in r_getent.results %}
+      {% if item.rc == 0 and item.stdout != '' %}
+      Host {{ item.item }}
+        HostName {{ item.stdout.split()[0] }}
+        User lab-user
+        IdentityFile /app/.ssh/id_rsa
+        StrictHostKeyChecking no
+        UserKnownHostsFile /dev/null
       {% endif %}
-  when: _zt_extra_hosts | length > 0
-  notify: restart showroom service
-
-- name: Flush handlers
-  ansible.builtin.meta: flush_handlers
+      {% endfor %}

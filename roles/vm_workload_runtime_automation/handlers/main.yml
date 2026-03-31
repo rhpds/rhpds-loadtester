@@ -1,8 +1,4 @@
 ---
-# Restart only the runner container — not the full showroom service.
-# showroom.service is Type=oneshot and cannot be restarted once completed.
-- name: restart showroom service
-  become: true
-  become_user: "{{ vm_workload_runtime_automation_showroom_user }}"
-  ansible.builtin.command:
-    cmd: podman restart {{ vm_workload_runtime_automation_runner_container }}
+# No handlers needed — SSH config and key are written directly to
+# /opt/showroom/.ssh/ on the bastion host and mounted into the container.
+# Changes take effect immediately without any container restart.

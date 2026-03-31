@@ -9,9 +9,6 @@ vm_workload_runtime_automation_runner_container: ansible-runner-api
 vm_workload_runtime_automation_ssh_key_src: "/home/lab-user/.ssh/{{ guid }}key.pem"
 vm_workload_runtime_automation_ssh_key_dest: /opt/showroom/.ssh/id_rsa
 
-# Showroom compose file — extra_hosts written here to persist through restarts
-vm_workload_runtime_automation_compose_file: /opt/showroom/orchestration/container-compose.yml
-
 # Inventory groups whose hosts should be resolvable inside the runner container
 # Each host's ansible_host (IP) will be added to the container's /etc/hosts
 vm_workload_runtime_automation_node_groups:
