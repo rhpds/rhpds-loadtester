@@ -1,6 +1,8 @@
 ---
+# Restart only the runner container — not the full showroom service.
+# showroom.service is Type=oneshot and cannot be restarted once completed.
 - name: restart showroom service
   become: true
-  ansible.builtin.systemd:
-    name: showroom
-    state: restarted
+  become_user: "{{ vm_workload_runtime_automation_showroom_user }}"
+  ansible.builtin.command:
+    cmd: podman restart {{ vm_workload_runtime_automation_runner_container }}
