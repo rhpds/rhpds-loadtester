@@ -5,8 +5,9 @@
 # Runs on the bastion AFTER vm_workload_showroom.
 # Prepares the ansible-runner-api container for ZT grading:
 #   1. Copies the lab SSH key so the runner can SSH to nodes
-#   2. Resolves node IPs via bastion DNS (getent hosts) and injects
-#      into the runner container's /etc/hosts
+#      (persists on bastion disk — survives restarts via volume mount)
+#   2. Resolves node IPs via bastion DNS and adds extra_hosts to compose
+#      (persists through container restarts — written to compose file)
 #
 # Node discovery: union of both sources
 #   - instances (AgV cloud-vms-base list) filtered by AnsibleGroup tag
@@ -74,16 +75,32 @@
   failed_when: false
   changed_when: false
 
-- name: Inject node entries into runner container /etc/hosts
+- name: Build extra_hosts list for compose
+  ansible.builtin.set_fact:
+    _zt_extra_hosts: >-
+      {%- set result = [] -%}
+      {%- for item in r_getent.results -%}
+        {%- if item.rc == 0 and item.stdout != '' -%}
+          {%- set _ = result.append(item.stdout.split()[0] ~ ':' ~ item.item) -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {{ result }}
+
+- name: Add extra_hosts to ansible-runner-api in compose (persists through restarts)
   become: true
-  become_user: "{{ vm_workload_runtime_automation_showroom_user }}"
-  ansible.builtin.shell: >-
-    podman exec {{ vm_workload_runtime_automation_runner_container }}
-    sh -c "grep -q ' {{ item.item }}$' /etc/hosts ||
-           echo '{{ item.stdout.split()[0] }} {{ item.item }}' >> /etc/hosts"
-  loop: "{{ r_getent.results }}"
-  when:
-    - item.rc == 0
-    - item.stdout != ''
-  loop_control:
-    label: "{{ item.item }} -> {{ item.stdout.split()[0] if item.stdout else 'unresolved' }}"
+  ansible.builtin.blockinfile:
+    path: "{{ vm_workload_runtime_automation_compose_file }}"
+    insertafter: "container_name: ansible-runner-api"
+    marker: "    # {mark} ZT extra_hosts"
+    block: |
+      {% if _zt_extra_hosts | length > 0 %}
+          extra_hosts:
+      {% for entry in _zt_extra_hosts %}
+            - "{{ entry }}"
+      {% endfor %}
+      {% endif %}
+  when: _zt_extra_hosts | length > 0
+  notify: restart showroom service
+
+- name: Flush handlers
+  ansible.builtin.meta: flush_handlers

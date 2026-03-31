@@ -1,0 +1,6 @@
+---
+- name: restart showroom service
+  become: true
+  ansible.builtin.systemd:
+    name: showroom
+    state: restarted
