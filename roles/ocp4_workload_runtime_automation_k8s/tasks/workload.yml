@@ -2,20 +2,14 @@
 # =============================================================================
 # ocp4_workload_runtime_automation_k8s
 #
+# Runs at provision time using agnosticd-admin credentials.
+# Creates a scoped SA + kubeconfig stored in showroom namespace.
+# jobs.py reads the kubeconfig Secret (pod SA can read its own namespace).
+# Playbooks use kubeconfig: {{ k8s_kubeconfig }} — no showroom SA RBAC needed.
+#
 # Two modes (ocp4_workload_runtime_automation_k8s_cluster_admin):
-#
-# false (default) — Multi-user namespace labs:
-#   Creates a scoped SA + token in each student namespace.
-#   Kubeconfig only has access to student namespaces.
-#   Admin token used only at provision time, never in showroom.
-#
-# true — Dedicated cluster labs (student = cluster-admin):
-#   Stores cluster-admin kubeconfig directly.
-#   Developer can use impersonate_user: in playbooks to test non-admin scenarios.
-#   Secure because student owns the dedicated cluster anyway.
-#
-# In both cases: kubeconfig stored as Secret in showroom namespace.
-# jobs.py reads it at job start, passes path as {{ k8s_kubeconfig }} extravar.
+#   false (default) — namespace-scoped SA token (multi-user labs)
+#   true — cluster-admin token (dedicated cluster labs)
 # =============================================================================
 
 # ── Dedicated cluster mode: store cluster-admin kubeconfig ───────────────────
@@ -105,10 +99,7 @@
   loop_control:
     label: "{{ ocp4_workload_runtime_automation_k8s_username }}-{{ item.suffix }}"
 
-# No long-lived token stored — jobs.py calls TokenRequest API per job (1h tokens).
-# Store SA location metadata in showroom namespace ConfigMap so jobs.py knows
-# which SA + namespace to request a token for.
-- name: Store zt-runner SA metadata in showroom namespace
+- name: Create long-lived token for zt-runner SA (first namespace)
   when: not (ocp4_workload_runtime_automation_k8s_cluster_admin | bool)
   kubernetes.core.k8s:
     host: "{{ ocp4_workload_runtime_automation_k8s_openshift_api_url | default(omit) }}"
@@ -117,15 +108,65 @@
     state: present
     definition:
       apiVersion: v1
-      kind: ConfigMap
+      kind: Secret
       metadata:
-        name: zt-runner-sa-config
+        name: "{{ ocp4_workload_runtime_automation_k8s_sa_name }}-token"
+        namespace: "{{ ocp4_workload_runtime_automation_k8s_username }}-{{ ocp4_workload_runtime_automation_k8s_namespace_suffixes[0].suffix }}"
+        annotations:
+          kubernetes.io/service-account.name: "{{ ocp4_workload_runtime_automation_k8s_sa_name }}"
+        labels:
+          created-by: rhpds-ftl
+          guid: "{{ guid }}"
+      type: kubernetes.io/service-account-token
+
+- name: Wait for token to be populated
+  when: not (ocp4_workload_runtime_automation_k8s_cluster_admin | bool)
+  kubernetes.core.k8s_info:
+    host: "{{ ocp4_workload_runtime_automation_k8s_openshift_api_url | default(omit) }}"
+    api_key: "{{ ocp4_workload_runtime_automation_k8s_openshift_api_token | default(omit) }}"
+    validate_certs: false
+    api_version: v1
+    kind: Secret
+    name: "{{ ocp4_workload_runtime_automation_k8s_sa_name }}-token"
+    namespace: "{{ ocp4_workload_runtime_automation_k8s_username }}-{{ ocp4_workload_runtime_automation_k8s_namespace_suffixes[0].suffix }}"
+  register: r_token
+  retries: 12
+  delay: 5
+  until: r_token.resources[0].data.token is defined
+
+- name: Build and store kubeconfig in showroom namespace
+  when: not (ocp4_workload_runtime_automation_k8s_cluster_admin | bool)
+  kubernetes.core.k8s:
+    host: "{{ ocp4_workload_runtime_automation_k8s_openshift_api_url | default(omit) }}"
+    api_key: "{{ ocp4_workload_runtime_automation_k8s_openshift_api_token | default(omit) }}"
+    validate_certs: false
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: "{{ ocp4_workload_runtime_automation_k8s_secret_name }}"
         namespace: "{{ ocp4_workload_runtime_automation_k8s_showroom_namespace }}"
         labels:
           created-by: rhpds-ftl
           guid: "{{ guid }}"
-      data:
-        sa_name: "{{ ocp4_workload_runtime_automation_k8s_sa_name }}"
-        sa_namespace: "{{ ocp4_workload_runtime_automation_k8s_username }}-{{ ocp4_workload_runtime_automation_k8s_namespace_suffixes[0].suffix }}"
-        api_url: "{{ ocp4_workload_runtime_automation_k8s_openshift_api_url | default('https://kubernetes.default.svc') }}"
-        mode: "namespace"
+          mode: namespace-scoped
+      stringData:
+        kubeconfig: |
+          apiVersion: v1
+          kind: Config
+          clusters:
+          - name: cluster
+            cluster:
+              server: "{{ ocp4_workload_runtime_automation_k8s_openshift_api_url | default('https://kubernetes.default.svc') }}"
+              certificate-authority-data: "{{ r_token.resources[0].data['ca.crt'] }}"
+          contexts:
+          - name: zt-runner
+            context:
+              cluster: cluster
+              user: zt-runner
+          current-context: zt-runner
+          users:
+          - name: zt-runner
+            user:
+              token: "{{ r_token.resources[0].data.token | b64decode }}"
