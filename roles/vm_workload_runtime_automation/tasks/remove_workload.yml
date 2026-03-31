@@ -1,0 +1,7 @@
+---
+# SSH key and /etc/hosts entries are ephemeral — live in the container and
+# /opt/showroom/.ssh/. Both are removed when the bastion VM is destroyed.
+# Nothing to explicitly clean up.
+- name: No-op — cleanup handled by VM destruction
+  ansible.builtin.debug:
+    msg: "vm_workload_runtime_automation: no explicit cleanup needed — bastion VM handles it"

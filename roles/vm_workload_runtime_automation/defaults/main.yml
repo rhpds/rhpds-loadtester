@@ -1,0 +1,15 @@
+---
+# Showroom system user that owns the runner container
+vm_workload_runtime_automation_showroom_user: showroom
+
+# Runner container name (from vm_workload_showroom compose)
+vm_workload_runtime_automation_runner_container: ansible-runner-api
+
+# SSH key — provisioned by control_user role, mounted into runner at /app/.ssh
+vm_workload_runtime_automation_ssh_key_src: "/home/lab-user/.ssh/{{ guid }}key.pem"
+vm_workload_runtime_automation_ssh_key_dest: /opt/showroom/.ssh/id_rsa
+
+# Inventory groups whose hosts should be resolvable inside the runner container
+# Each host's ansible_host (IP) will be added to the container's /etc/hosts
+vm_workload_runtime_automation_node_groups:
+  - nodes

@@ -1,0 +1,8 @@
+---
+- name: Run workload tasks
+  when: ACTION | default('provision') == 'provision'
+  ansible.builtin.include_tasks: workload.yml
+
+- name: Run remove tasks
+  when: ACTION | default('provision') in ['destroy', 'remove']
+  ansible.builtin.include_tasks: remove_workload.yml

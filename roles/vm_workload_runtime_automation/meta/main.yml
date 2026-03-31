@@ -1,0 +1,9 @@
+---
+galaxy_info:
+  role_name: vm_workload_runtime_automation
+  namespace: rhpds
+  description: >-
+    Sets up ZT runner container on bastion for RHEL/VM labs.
+    Copies SSH key and injects node hosts into runner container.
+  license: Apache-2.0
+  min_ansible_version: "2.14"

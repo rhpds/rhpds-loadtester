@@ -1,0 +1,42 @@
+---
+# =============================================================================
+# vm_workload_runtime_automation
+#
+# Runs on the bastion AFTER vm_workload_showroom.
+# Prepares the ansible-runner-api container for ZT grading:
+#   1. Copies the lab SSH key so the runner can SSH to nodes
+#   2. Injects node IP→hostname mappings into the container's /etc/hosts
+#      so playbooks can address nodes by name (node, node01, node02...)
+# =============================================================================
+
+- name: Copy lab SSH key to showroom .ssh directory
+  become: true
+  ansible.builtin.copy:
+    src: "{{ vm_workload_runtime_automation_ssh_key_src }}"
+    dest: "{{ vm_workload_runtime_automation_ssh_key_dest }}"
+    owner: "{{ vm_workload_runtime_automation_showroom_user }}"
+    group: "{{ vm_workload_runtime_automation_showroom_user }}"
+    mode: '0600'
+    remote_src: true
+
+- name: Build node hosts list from Ansible inventory
+  ansible.builtin.set_fact:
+    _zt_node_hosts: >-
+      {%- set result = [] -%}
+      {%- for group in vm_workload_runtime_automation_node_groups -%}
+        {%- for node in groups[group] | default([]) -%}
+          {%- set _ = result.append({'name': node, 'ip': hostvars[node]['ansible_host']}) -%}
+        {%- endfor -%}
+      {%- endfor -%}
+      {{ result }}
+
+- name: Inject node entries into runner container /etc/hosts
+  become: true
+  become_user: "{{ vm_workload_runtime_automation_showroom_user }}"
+  ansible.builtin.shell: >-
+    podman exec {{ vm_workload_runtime_automation_runner_container }}
+    sh -c "grep -q ' {{ item.name }}$' /etc/hosts ||
+           echo '{{ item.ip }} {{ item.name }}' >> /etc/hosts"
+  loop: "{{ _zt_node_hosts }}"
+  loop_control:
+    label: "{{ item.name }} -> {{ item.ip }}"
