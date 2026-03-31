@@ -7,6 +7,10 @@
 #   1. Copies the lab SSH key so the runner can SSH to nodes
 #   2. Resolves node IPs via bastion DNS (getent hosts) and injects
 #      into the runner container's /etc/hosts
+#
+# Node discovery: union of both sources
+#   - instances (AgV cloud-vms-base list) filtered by AnsibleGroup tag
+#   - Ansible inventory groups (vm_workload_runtime_automation_node_groups)
 # =============================================================================
 
 - name: Copy lab SSH key to showroom .ssh directory
@@ -19,15 +23,48 @@
     mode: '0600'
     remote_src: true
 
-- name: Build node hostname list from inventory groups
+- name: Build node list from AgV instances + inventory groups
   ansible.builtin.set_fact:
     _zt_node_names: >-
       {%- set result = [] -%}
+
+      {%- if instances is defined -%}
+        {%- for inst in instances -%}
+          {%- set is_node = false -%}
+          {%- for tag in inst.tags | default([]) -%}
+            {%- if tag.key == 'AnsibleGroup' -%}
+              {%- for grp in vm_workload_runtime_automation_node_groups -%}
+                {%- if grp in tag.value -%}
+                  {%- set is_node = true -%}
+                {%- endif -%}
+              {%- endfor -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {%- if is_node -%}
+            {%- if inst.unique | default(false) | bool or (inst.count | default(1) | int) == 1 -%}
+              {%- if inst.name not in result -%}
+                {%- set _ = result.append(inst.name) -%}
+              {%- endif -%}
+            {%- else -%}
+              {%- for i in range(1, (inst.count | default(1) | int) + 1) -%}
+                {%- set name = inst.name ~ i -%}
+                {%- if name not in result -%}
+                  {%- set _ = result.append(name) -%}
+                {%- endif -%}
+              {%- endfor -%}
+            {%- endif -%}
+          {%- endif -%}
+        {%- endfor -%}
+      {%- endif -%}
+
       {%- for group in vm_workload_runtime_automation_node_groups -%}
         {%- for node in groups[group] | default([]) -%}
-          {%- set _ = result.append(node) -%}
+          {%- if node not in result -%}
+            {%- set _ = result.append(node) -%}
+          {%- endif -%}
         {%- endfor -%}
       {%- endfor -%}
+
       {{ result }}
 
 - name: Resolve node IPs via bastion DNS
