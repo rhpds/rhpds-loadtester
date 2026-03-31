@@ -25,7 +25,15 @@
       {%- set result = [] -%}
       {%- for group in vm_workload_runtime_automation_node_groups -%}
         {%- for node in groups[group] | default([]) -%}
-          {%- set _ = result.append({'name': node, 'ip': hostvars[node]['ansible_host']}) -%}
+          {%- set ns = namespace(ip='') -%}
+          {%- for key in ['ansible_host', 'ansible_ssh_host'] -%}
+            {%- if ns.ip == '' and key in hostvars[node] -%}
+              {%- set ns.ip = hostvars[node][key] -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {%- if ns.ip != '' -%}
+            {%- set _ = result.append({'name': node, 'ip': ns.ip}) -%}
+          {%- endif -%}
         {%- endfor -%}
       {%- endfor -%}
       {{ result }}
