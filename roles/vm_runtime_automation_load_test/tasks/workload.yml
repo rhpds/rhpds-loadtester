@@ -1,6 +1,8 @@
 ---
 # =============================================================================
-# zt_load_test_rhel — trigger solve + validate on all modules
+# vm_runtime_automation_load_test
+# Trigger solve + validate on all modules via SSE /stream/ API (RHEL/VM labs)
+# Showroom is on OCP even for VM labs; runner accessible via route.
 # =============================================================================
 
 - name: Get showroom route
@@ -11,8 +13,6 @@
     api_version: route.openshift.io/v1
     kind: Route
     namespace: "{{ zt_load_test_rhel_showroom_namespace }}"
-    label_selectors:
-      - "app=showroom"
   register: r_route
 
 - name: Fail if showroom route not found
@@ -20,100 +20,91 @@
     msg: "Showroom route not found in {{ zt_load_test_rhel_showroom_namespace }}"
   when: r_route.resources | length == 0
 
-- name: Set runner base URL
+- name: Set runner base URL (SSE /stream/ API)
   ansible.builtin.set_fact:
-    _runner_url: "https://{{ r_route.resources[0].spec.host }}/runner"
+    _runner_url: "https://{{ r_route.resources[0].spec.host }}/stream"
 
-- name: Wait for runner API to be ready
+- name: Wait for runner to be ready
   ansible.builtin.uri:
-    url: "{{ _runner_url }}/api/config"
+    url: "{{ _runner_url }}/health"
+    validate_certs: false
+    status_code: 200
+  register: r_health
+  retries: "{{ (zt_load_test_rhel_wait_seconds | int / 10) | int }}"
+  delay: 10
+  until: r_health.status == 200
+
+- name: Get available modules
+  ansible.builtin.uri:
+    url: "{{ _runner_url }}/config"
     validate_certs: false
     status_code: 200
   register: r_config
-  retries: "{{ (zt_load_test_rhel_wait_seconds | int / 10) | int }}"
-  delay: 10
-  until: r_config.status == 200
 
 - name: Set modules list
   ansible.builtin.set_fact:
-    _modules: "{{ r_config.json.keys() | reject('equalto', 'collections') | list }}"
+    _modules: "{{ r_config.json.keys() | list | sort }}"
 
-- name: "Trigger solve on all modules: {{ _modules }}"
-  ansible.builtin.uri:
-    url: "{{ _runner_url }}/api/{{ item }}/solve"
-    method: POST
-    validate_certs: false
-    status_code: [200, 202]
-    body_format: json
-  register: r_solve_jobs
+- name: "Run solve on all modules: {{ _modules }}"
+  ansible.builtin.shell:
+    cmd: >-
+      curl -sk -N --max-time {{ zt_load_test_rhel_module_timeout }}
+      "{{ _runner_url }}/solve/{{ item }}"
+  register: r_solve_results
   loop: "{{ _modules }}"
-
-- name: Poll solve jobs until complete
-  ansible.builtin.uri:
-    url: "{{ _runner_url }}/api/job/{{ item.json.Job_id }}"
-    validate_certs: false
-    status_code: 200
-  register: r_solve_poll
-  loop: "{{ r_solve_jobs.results | selectattr('json.Job_id', 'defined') | list }}"
   loop_control:
-    label: "{{ item.item }}"
-  retries: 30
-  delay: 5
-  until: r_solve_poll.json.Status in ['successful', 'failed', 'error']
-
-- name: "Trigger validation on all modules: {{ _modules }}"
-  ansible.builtin.uri:
-    url: "{{ _runner_url }}/api/{{ item }}/validation"
-    method: POST
-    validate_certs: false
-    status_code: [200, 202]
-    body_format: json
-  register: r_val_jobs
-  loop: "{{ _modules }}"
-
-- name: Poll validation jobs until complete
-  ansible.builtin.uri:
-    url: "{{ _runner_url }}/api/job/{{ item.json.Job_id }}"
-    validate_certs: false
-    status_code: 200
-  register: r_val_poll
-  loop: "{{ r_val_jobs.results | selectattr('json.Job_id', 'defined') | list }}"
-  loop_control:
-    label: "{{ item.item }}"
-  retries: 30
-  delay: 5
-  until: r_val_poll.json.Status in ['successful', 'failed', 'error']
-
-- name: Build results summary
-  ansible.builtin.set_fact:
-    _solve_results: >-
-      {{ dict(_modules | zip(
-           r_solve_poll.results | map(attribute='json') | map(attribute='Status', default='unknown')
-         )) }}
-    _val_results: >-
-      {{ dict(_modules | zip(
-           r_val_poll.results | map(attribute='json') | map(attribute='Status', default='unknown')
-         )) }}
-
-- name: Report load test results via agnosticd_user_info
-  agnosticd.core.agnosticd_user_info:
-    data:
-      zt_load_test_solve: "{{ _solve_results }}"
-      zt_load_test_validation: "{{ _val_results }}"
-    msg: |
-      ZT Load Test (OCP)
-      Solve:      {{ _solve_results }}
-      Validation: {{ _val_results }}
+    label: "{{ item }}"
   ignore_errors: true
 
-- name: Fail if any stage failed
+- name: "Run validate on all modules: {{ _modules }}"
+  ansible.builtin.shell:
+    cmd: >-
+      curl -sk -N --max-time {{ zt_load_test_rhel_module_timeout }}
+      "{{ _runner_url }}/validate/{{ item }}"
+  register: r_val_results
+  loop: "{{ _modules }}"
+  loop_control:
+    label: "{{ item }}"
+  ignore_errors: true
+
+- name: Build solve results summary
+  ansible.builtin.set_fact:
+    _solve_summary: >-
+      {{ dict(_modules | zip(
+           r_solve_results.results
+           | map(attribute='stdout', default='')
+           | map('regex_search', '✓ Completed successfully!|✗ Failed')
+           | map('default', 'unknown')
+         )) }}
+
+- name: Build validate results summary
+  ansible.builtin.set_fact:
+    _val_summary: >-
+      {{ dict(_modules | zip(
+           r_val_results.results
+           | map(attribute='stdout', default='')
+           | map('regex_search', '✓ Completed successfully!|✗ Failed')
+           | map('default', 'unknown')
+         )) }}
+
+- name: Report load test results
+  agnosticd.core.agnosticd_user_info:
+    data:
+      zt_load_test_solve: "{{ _solve_summary }}"
+      zt_load_test_validate: "{{ _val_summary }}"
+    msg: |
+      E2E Load Test (RHEL/VM) — {{ zt_load_test_rhel_showroom_namespace }}
+      Solve:    {{ _solve_summary }}
+      Validate: {{ _val_summary }}
+  ignore_errors: true
+
+- name: Fail if any validation failed
   ansible.builtin.fail:
     msg: >-
-      ZT load test failures!
-      Solve: {{ _solve_results }}
-      Validation: {{ _val_results }}
+      E2E load test failures!
+      Solve:    {{ _solve_summary }}
+      Validate: {{ _val_summary }}
   when: >-
-    'failed' in (_solve_results.values() | list) or
-    'error'  in (_solve_results.values() | list) or
-    'failed' in (_val_results.values() | list) or
-    'error'  in (_val_results.values() | list)
+    '✗ Failed' in (_solve_summary.values() | list) or
+    '✗ Failed' in (_val_summary.values() | list) or
+    'unknown' in (_val_summary.values() | list)
