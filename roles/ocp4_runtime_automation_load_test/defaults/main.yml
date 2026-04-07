@@ -13,8 +13,17 @@ zt_load_test_ocp_showroom_namespace: >-
 zt_load_test_ocp_wait_seconds: 120
 
 # Cluster connection (for discovering showroom route)
+# openshift_cluster_admin_token  = dedicated OCP (from component propagate_provision_data)
+# cluster_admin_agnosticd_sa_token = tenant OCP (from OcpSandbox)
+# openshift_api_key               = AgD v2 env var injection
 zt_load_test_ocp_openshift_api_url: "{{ openshift_api_url | default('') }}"
-zt_load_test_ocp_openshift_api_token: "{{ openshift_api_key | default('') }}"
+zt_load_test_ocp_openshift_api_token: >-
+  {{
+    openshift_cluster_admin_token
+    | default(cluster_admin_agnosticd_sa_token)
+    | default(openshift_api_key)
+    | default('')
+  }}
 
 # Max seconds to wait for a single module solve/validate SSE stream
 zt_load_test_ocp_module_timeout: 600
