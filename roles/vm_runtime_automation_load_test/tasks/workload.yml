@@ -32,7 +32,7 @@
   ansible.builtin.shell:
     cmd: >-
       curl -sk -N --max-time {{ zt_load_test_rhel_module_timeout }}
-      "http://localhost:{{ zt_load_test_rhel_runner_port }}/solve/{{ item }}"
+      "http://localhost:{{ zt_load_test_rhel_runner_port }}{{ zt_load_test_rhel_runner_path }}/solve/{{ item }}"
   register: r_solve_results
   loop: "{{ _modules | default([]) }}"
   loop_control:
@@ -44,7 +44,8 @@
   ansible.builtin.shell:
     cmd: >-
       curl -sk -N --max-time {{ zt_load_test_rhel_module_timeout }}
-      "http://localhost:{{ zt_load_test_rhel_runner_port }}/validate/{{ item }}"
+      "http://localhost:{{ zt_load_test_rhel_runner_port }}{{ zt_load_test_rhel_runner_path }}/validate/{{ item }}"
+
   register: r_val_results
   loop: "{{ _modules | default([]) }}"
   loop_control:
@@ -58,7 +59,7 @@
       {{ dict((_modules | default([])) | zip(
            r_solve_results.results | default([])
            | map(attribute='stdout', default='')
-           | map('regex_search', '✓ Completed successfully!|✗ Failed')
+           | map('regex_search', 'Completed successfully|\\u2713|Failed|\\u2717')
            | map('default', 'unknown')
          )) }}
   when: _modules is defined
@@ -69,7 +70,7 @@
       {{ dict((_modules | default([])) | zip(
            r_val_results.results | default([])
            | map(attribute='stdout', default='')
-           | map('regex_search', '✓ Completed successfully!|✗ Failed')
+           | map('regex_search', 'Completed successfully|\\u2713|Failed|\\u2717')
            | map('default', 'unknown')
          )) }}
   when: _modules is defined

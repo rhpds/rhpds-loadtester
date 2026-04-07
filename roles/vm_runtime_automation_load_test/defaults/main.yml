@@ -6,6 +6,10 @@
 # Port the zt-runner listens on (set by showroom_ansible_runner_api_port, default 8501)
 zt_load_test_rhel_runner_port: "{{ showroom_ansible_runner_api_port | default(8501) }}"
 
+# API path prefix — zt-runner:v2.4.x uses /stream/* (was empty in v2.3.x)
+# Set showroom_ansible_runner_path: "/stream" in catalog for v2.4.x
+zt_load_test_rhel_runner_path: "{{ showroom_ansible_runner_path | default('') }}"
+
 # Seconds to wait for runner to be ready
 zt_load_test_rhel_wait_seconds: 120
 
