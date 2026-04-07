@@ -8,7 +8,7 @@
 
 - name: Wait for runner to be ready on bastion
   ansible.builtin.uri:
-    url: "http://localhost:{{ zt_load_test_rhel_runner_port }}/stream/health"
+    url: "http://localhost:{{ zt_load_test_rhel_runner_port }}/health"
     status_code: 200
   register: r_health
   retries: "{{ (zt_load_test_rhel_wait_seconds | int / 10) | int }}"
@@ -18,7 +18,7 @@
 
 - name: Get available modules
   ansible.builtin.uri:
-    url: "http://localhost:{{ zt_load_test_rhel_runner_port }}/stream/config"
+    url: "http://localhost:{{ zt_load_test_rhel_runner_port }}/config"
     status_code: 200
   register: r_config
   when: r_health is not failed
@@ -32,7 +32,7 @@
   ansible.builtin.shell:
     cmd: >-
       curl -sk -N --max-time {{ zt_load_test_rhel_module_timeout }}
-      "http://localhost:{{ zt_load_test_rhel_runner_port }}/stream/solve/{{ item }}"
+      "http://localhost:{{ zt_load_test_rhel_runner_port }}/solve/{{ item }}"
   register: r_solve_results
   loop: "{{ _modules | default([]) }}"
   loop_control:
@@ -44,7 +44,7 @@
   ansible.builtin.shell:
     cmd: >-
       curl -sk -N --max-time {{ zt_load_test_rhel_module_timeout }}
-      "http://localhost:{{ zt_load_test_rhel_runner_port }}/stream/validate/{{ item }}"
+      "http://localhost:{{ zt_load_test_rhel_runner_port }}/validate/{{ item }}"
   register: r_val_results
   loop: "{{ _modules | default([]) }}"
   loop_control:
