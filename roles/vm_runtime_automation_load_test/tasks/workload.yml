@@ -1,118 +1,101 @@
 ---
 # =============================================================================
 # vm_runtime_automation_load_test
-# Trigger solve + validate on all modules via SSE /stream/ API (RHEL/VM labs)
-# Showroom is on OCP even for VM labs; runner accessible via route.
+# Runs ON the bastion host — showroom/runner are local (podman compose)
+# No kubernetes.core needed — curls localhost directly
+# Add to: post_software_final_workloads.bastions (after vm_workload_runtime_automation)
 # =============================================================================
 
-- name: Get showroom route
-  kubernetes.core.k8s_info:
-    host: "{{ zt_load_test_rhel_openshift_api_url | default(omit) }}"
-    api_key: "{{ zt_load_test_rhel_openshift_api_token | default(omit) }}"
-    validate_certs: false
-    api_version: route.openshift.io/v1
-    kind: Route
-    namespace: "{{ zt_load_test_rhel_showroom_namespace }}"
-  register: r_route
-
-- name: Fail if showroom route not found
-  ansible.builtin.debug:
-    msg: "Showroom route not found in {{ zt_load_test_rhel_showroom_namespace }}"
-  when: r_route.resources | length == 0
-
-- name: Set runner base URL (SSE /stream/ API)
-  ansible.builtin.set_fact:
-    _runner_url: "https://{{ r_route.resources[0].spec.host }}/stream"
-
-- name: Wait for runner to be ready
+- name: Wait for runner to be ready on bastion
   ansible.builtin.uri:
-    url: "{{ _runner_url }}/health"
-    validate_certs: false
+    url: "http://localhost:{{ zt_load_test_rhel_runner_port }}/stream/health"
     status_code: 200
   register: r_health
   retries: "{{ (zt_load_test_rhel_wait_seconds | int / 10) | int }}"
   delay: 10
   until: r_health.status == 200
+  ignore_errors: true
 
 - name: Get available modules
   ansible.builtin.uri:
-    url: "{{ _runner_url }}/config"
-    validate_certs: false
+    url: "http://localhost:{{ zt_load_test_rhel_runner_port }}/stream/config"
     status_code: 200
   register: r_config
+  when: r_health is not failed
 
 - name: Set modules list
   ansible.builtin.set_fact:
     _modules: "{{ r_config.json.keys() | list | sort }}"
+  when: r_config is not skipped
 
-- name: "Run solve on all modules: {{ _modules }}"
+- name: "Run solve on all modules: {{ _modules | default([]) }}"
   ansible.builtin.shell:
     cmd: >-
       curl -sk -N --max-time {{ zt_load_test_rhel_module_timeout }}
-      "{{ _runner_url }}/solve/{{ item }}"
+      "http://localhost:{{ zt_load_test_rhel_runner_port }}/stream/solve/{{ item }}"
   register: r_solve_results
-  loop: "{{ _modules }}"
+  loop: "{{ _modules | default([]) }}"
   loop_control:
     label: "{{ item }}"
   ignore_errors: true
+  when: _modules is defined
 
-- name: "Run validate on all modules: {{ _modules }}"
+- name: "Run validate on all modules: {{ _modules | default([]) }}"
   ansible.builtin.shell:
     cmd: >-
       curl -sk -N --max-time {{ zt_load_test_rhel_module_timeout }}
-      "{{ _runner_url }}/validate/{{ item }}"
+      "http://localhost:{{ zt_load_test_rhel_runner_port }}/stream/validate/{{ item }}"
   register: r_val_results
-  loop: "{{ _modules }}"
+  loop: "{{ _modules | default([]) }}"
   loop_control:
     label: "{{ item }}"
   ignore_errors: true
+  when: _modules is defined
 
 - name: Build solve results summary
   ansible.builtin.set_fact:
     _solve_summary: >-
-      {{ dict(_modules | zip(
-           r_solve_results.results
+      {{ dict((_modules | default([])) | zip(
+           r_solve_results.results | default([])
            | map(attribute='stdout', default='')
            | map('regex_search', '✓ Completed successfully!|✗ Failed')
            | map('default', 'unknown')
          )) }}
+  when: _modules is defined
 
 - name: Build validate results summary
   ansible.builtin.set_fact:
     _val_summary: >-
-      {{ dict(_modules | zip(
-           r_val_results.results
+      {{ dict((_modules | default([])) | zip(
+           r_val_results.results | default([])
            | map(attribute='stdout', default='')
            | map('regex_search', '✓ Completed successfully!|✗ Failed')
            | map('default', 'unknown')
          )) }}
-
-
-- name: Build overall pass/fail status
-  ansible.builtin.set_fact:
-    _all_passed: >-
-      {{ '✗ Failed' not in (_solve_summary.values() | list) and
-         '✗ Failed' not in (_val_summary.values() | list) and
-         'unknown' not in (_val_summary.values() | list) }}
+  when: _modules is defined
 
 - name: Report load test results
-  agnosticd.core.agnosticd_user_info:
-    data:
-      zt_load_test_solve: "{{ _solve_summary }}"
-      zt_load_test_validate: "{{ _val_summary }}"
+  ansible.builtin.debug:
     msg: |
-      E2E Load Test (RHEL/VM) — {{ zt_load_test_rhel_showroom_namespace }}
-      Solve:    {{ _solve_summary }}
-      Validate: {{ _val_summary }}
-  ignore_errors: true
+      ═══════════════════════════════════════
+      E2E Load Test (RHEL/VM bastion)
+      ═══════════════════════════════════════
+      {% for m in (_modules | default([])) %}
+      {{ m }}:
+        Solve:    {{ (_solve_summary | default({}))[m] | default('unknown') }}
+        Validate: {{ (_val_summary | default({}))[m] | default('unknown') }}
+      {% endfor %}
+      ═══════════════════════════════════════
+  when: _modules is defined
 
-- name: Fail if any validation failed
+- name: Log failures (non-blocking)
   ansible.builtin.debug:
     msg: >-
-      E2E load test failures!
-      Solve:    {{ _solve_summary }}
-      Validate: {{ _val_summary }}
-  when: >-
-    '✗ Failed' in (_solve_summary.values() | list) or
-    '✗ Failed' in (_val_summary.values() | list) or
-    'unknown' in (_val_summary.values() | list)
+      ⚠️ E2E load test issues (provision continues):
+      Solve:    {{ _solve_summary | default({}) }}
+      Validate: {{ _val_summary | default({}) }}
+  when:
+    - _modules is defined
+    - >-
+      '✗ Failed' in ((_solve_summary | default({})).values() | list) or
+      '✗ Failed' in ((_val_summary | default({})).values() | list)

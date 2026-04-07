@@ -1,14 +1,13 @@
 ---
-# zt_load_test_rhel — triggers solve + validation on all ZT modules (RHEL/VM labs)
-# Showroom deployed on OCP even for VM labs; runner accessible via route.
+# vm_runtime_automation_load_test
+# Runs ON the bastion — curls localhost runner directly (no kubernetes.core)
+# Add to: post_software_final_workloads.bastions after vm_workload_runtime_automation
 
-zt_load_test_rhel_showroom_namespace: >-
-  {{ ocp4_workload_showroom_namespace | default('showroom-' + guid) }}
+# Port the zt-runner listens on (set by showroom_ansible_runner_api_port, default 8501)
+zt_load_test_rhel_runner_port: "{{ showroom_ansible_runner_api_port | default(8501) }}"
 
+# Seconds to wait for runner to be ready
 zt_load_test_rhel_wait_seconds: 120
 
-zt_load_test_rhel_openshift_api_url: "{{ openshift_api_url | default('') }}"
-zt_load_test_rhel_openshift_api_token: "{{ openshift_api_key | default('') }}"
-
-# Max seconds to wait for a single module solve/validate SSE stream
+# Max seconds to wait for a single module SSE stream
 zt_load_test_rhel_module_timeout: 600
