@@ -14,6 +14,15 @@
 #   - Ansible inventory groups (vm_workload_runtime_automation_node_groups)
 # =============================================================================
 
+- name: Ensure runtime-automation directory exists
+  become: true
+  ansible.builtin.file:
+    path: /opt/showroom/content/runtime-automation
+    state: directory
+    owner: "{{ vm_workload_runtime_automation_showroom_user }}"
+    group: "{{ vm_workload_runtime_automation_showroom_user }}"
+    mode: '0755'
+
 - name: Copy lab SSH key to showroom .ssh directory
   become: true
   ansible.builtin.copy:
