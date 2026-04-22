@@ -110,3 +110,9 @@
         IdentityFile /app/.ssh/id_rsa
         StrictHostKeyChecking no
         UserKnownHostsFile /dev/null
+
+- name: Remap .ssh ownership for ansible-runner container (rootless podman uid mapping)
+  ansible.builtin.shell: >
+    podman unshare chown -R 1001:1001 {{ vm_workload_runtime_automation_ssh_key_dest | dirname }}
+  become: true
+  become_user: "{{ vm_workload_runtime_automation_showroom_user }}"
